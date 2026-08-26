@@ -2,11 +2,12 @@ import os
 import re
 import time
 import base64
+import threading
 import unicodedata
 from datetime import datetime, timezone
 
 import requests
-from dotenv import load_dotenv, set_key
+from dotenv import dotenv_values, load_dotenv, set_key
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
@@ -17,9 +18,11 @@ ENV_FILE = ".env"
 REPLY_COOLDOWN_SECONDS = 180
 HEARTBEAT_INTERVAL_SECONDS = 900
 RETRY_DELAYS_SECONDS = (5, 10, 30)
+NONCE_LOCK_FILE = ".nonce.lock"
 
 load_dotenv(ENV_FILE)
 NEXT_NONCE = int(os.getenv("NONCE", "0"))
+NONCE_LOCK = threading.Lock()
 
 
 # Base58btc
@@ -99,12 +102,32 @@ def sweep_text(text: str) -> str:
 def get_next_nonce(minimum=0):
     global NEXT_NONCE
 
-    now = int(time.time() * 1000)
-    nonce = max(NEXT_NONCE + 1, now, minimum + 1)
-    NEXT_NONCE = nonce
-    os.environ["NONCE"] = str(nonce)
-    set_key(ENV_FILE, "NONCE", str(nonce))
-    return nonce
+    with NONCE_LOCK:
+        with open(NONCE_LOCK_FILE, "a+", encoding="utf-8") as lock_file:
+            lock_file.seek(0)
+            if not lock_file.read(1):
+                lock_file.seek(0)
+                lock_file.write("0")
+                lock_file.flush()
+
+            lock_file.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+
+            try:
+                values = dotenv_values(ENV_FILE)
+                current = int(values.get("NONCE") or 0)
+                now = int(time.time() * 1000)
+                nonce = max(NEXT_NONCE + 1, current + 1, now, minimum + 1)
+                NEXT_NONCE = nonce
+                os.environ["NONCE"] = str(nonce)
+                set_key(ENV_FILE, "NONCE", str(nonce))
+                return nonce
+            finally:
+                if os.name == "nt":
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 # Signed message
@@ -257,7 +280,6 @@ def main():
 
     private_key, did = load_or_create_identity()
     print(f"DID  : {did}")
-    send_signed_message(private_key, did, greeting_text())
     print("Polling...\n")
 
     last_seq = None
@@ -270,9 +292,11 @@ def main():
     while True:
         try:
             poll_counter += 1
+
             if not initialized:
-                # Establish a cursor without replying to messages from before startup.
+                # Establish the startup boundary without replying to old messages.
                 last_seq = latest_seq(get_messages())
+                send_signed_message(private_key, did, greeting_text())
                 initialized = True
                 consecutive_errors = 0
                 continue
@@ -308,13 +332,17 @@ def main():
             if exc.response is not None:
                 print(f"Response: {exc.response.text}")
             if exc.response is not None and exc.response.status_code == 503:
-                delay = RETRY_DELAYS_SECONDS[min(consecutive_errors, len(RETRY_DELAYS_SECONDS) - 1)]
+                delay = RETRY_DELAYS_SECONDS[
+                    min(consecutive_errors, len(RETRY_DELAYS_SECONDS) - 1)
+                ]
                 consecutive_errors += 1
                 print(f"[retry] Waiting {delay}s before retrying.")
                 time.sleep(delay)
         except requests.RequestException as exc:
             print(f"[network error] {exc}")
-            delay = RETRY_DELAYS_SECONDS[min(consecutive_errors, len(RETRY_DELAYS_SECONDS) - 1)]
+            delay = RETRY_DELAYS_SECONDS[
+                min(consecutive_errors, len(RETRY_DELAYS_SECONDS) - 1)
+            ]
             consecutive_errors += 1
             print(f"[retry] Waiting {delay}s before retrying.")
             time.sleep(delay)
