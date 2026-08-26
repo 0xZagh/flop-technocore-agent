@@ -16,8 +16,10 @@ ROOM = "lobby"
 ENV_FILE = ".env"
 REPLY_COOLDOWN_SECONDS = 180
 HEARTBEAT_INTERVAL_SECONDS = 900
+RETRY_DELAYS_SECONDS = (5, 10, 30)
 
 load_dotenv(ENV_FILE)
+NEXT_NONCE = int(os.getenv("NONCE", "0"))
 
 
 # Base58btc
@@ -95,9 +97,12 @@ def sweep_text(text: str) -> str:
 
 # Nonce
 def get_next_nonce(minimum=0):
-    current = int(os.getenv("NONCE", "0"))
+    global NEXT_NONCE
+
     now = int(time.time() * 1000)
-    nonce = max(current + 1, now, minimum + 1)
+    nonce = max(NEXT_NONCE + 1, now, minimum + 1)
+    NEXT_NONCE = nonce
+    os.environ["NONCE"] = str(nonce)
     set_key(ENV_FILE, "NONCE", str(nonce))
     return nonce
 
@@ -196,6 +201,31 @@ def get_messages(since=None, poll_counter=None):
     return response.json()
 
 
+def get_records(messages):
+    if isinstance(messages, dict):
+        records = messages.get("messages", [])
+        if not records and "data" in messages:
+            records = messages["data"]
+        return records
+
+    return messages
+
+
+def latest_seq(messages):
+    sequences = []
+
+    for message in get_records(messages):
+        if not isinstance(message, dict):
+            continue
+
+        try:
+            sequences.append(int(message["seq"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    return max(sequences, default=None)
+
+
 # Message handling
 def handle_message(message, private_key, did, reply_times):
     text = message.get("text", "")
@@ -234,23 +264,28 @@ def main():
     reply_times = {}
     last_heartbeat = time.monotonic()
     poll_counter = 0
+    initialized = False
+    consecutive_errors = 0
 
     while True:
         try:
             poll_counter += 1
+            if not initialized:
+                # Establish a cursor without replying to messages from before startup.
+                last_seq = latest_seq(get_messages())
+                initialized = True
+                consecutive_errors = 0
+                continue
+
             messages = get_messages(last_seq, poll_counter)
+            consecutive_errors = 0
 
             now = time.monotonic()
             if now - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
                 send_heartbeat(private_key, did)
                 last_heartbeat = now
 
-            if isinstance(messages, dict):
-                records = messages.get("messages", [])
-                if not records and "data" in messages:
-                    records = messages["data"]
-            else:
-                records = messages
+            records = get_records(messages)
 
             for message in records:
                 if not isinstance(message, dict):
@@ -272,8 +307,17 @@ def main():
             print(f"[HTTP error] {exc}")
             if exc.response is not None:
                 print(f"Response: {exc.response.text}")
+            if exc.response is not None and exc.response.status_code == 503:
+                delay = RETRY_DELAYS_SECONDS[min(consecutive_errors, len(RETRY_DELAYS_SECONDS) - 1)]
+                consecutive_errors += 1
+                print(f"[retry] Waiting {delay}s before retrying.")
+                time.sleep(delay)
         except requests.RequestException as exc:
             print(f"[network error] {exc}")
+            delay = RETRY_DELAYS_SECONDS[min(consecutive_errors, len(RETRY_DELAYS_SECONDS) - 1)]
+            consecutive_errors += 1
+            print(f"[retry] Waiting {delay}s before retrying.")
+            time.sleep(delay)
         except KeyboardInterrupt:
             print("\nAgent stopped by user.")
             break
