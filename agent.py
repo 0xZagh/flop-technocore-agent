@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import base64
 import unicodedata
@@ -55,12 +56,12 @@ def load_or_create_identity():
             expected_did = create_did(public_key)
 
             if did and did != expected_did:
-                raise ValueError("DID di .env tidak cocok dengan PRIVATE_KEY.")
+                raise ValueError("DID in .env does not match PRIVATE_KEY.")
 
             return private_key, expected_did
         except Exception as exc:
             raise RuntimeError(
-                f"Gagal membaca PRIVATE_KEY dari .env: {exc}"
+                f"Failed to read PRIVATE_KEY from .env: {exc}"
             ) from exc
 
     private_key = Ed25519PrivateKey.generate()
@@ -93,10 +94,10 @@ def sweep_text(text: str) -> str:
 
 
 # Nonce
-def get_next_nonce():
+def get_next_nonce(minimum=0):
     current = int(os.getenv("NONCE", "0"))
     now = int(time.time() * 1000)
-    nonce = max(current + 1, now)
+    nonce = max(current + 1, now, minimum + 1)
     set_key(ENV_FILE, "NONCE", str(nonce))
     return nonce
 
@@ -117,19 +118,30 @@ def send_signed_message(private_key, did, text):
     if len(text) > 4096:
         text = text[:4096]
 
-    nonce = get_next_nonce()
-    signature = sign_message(private_key, ROOM, nonce, text)
     url = f"{BASE_URL}/r/{ROOM}"
-    payload = {
-        "did": did,
-        "sig": signature,
-        "nonce": str(nonce),
-        "text": text,
-    }
 
-    response = requests.post(url, json=payload, timeout=15)
-    response.raise_for_status()
-    print(f"[sent] {text}")
+    for attempt in range(2):
+        nonce = get_next_nonce()
+        signature = sign_message(private_key, ROOM, nonce, text)
+        payload = {
+            "did": did,
+            "sig": signature,
+            "nonce": str(nonce),
+            "text": text,
+        }
+
+        try:
+            response = requests.post(url, json=payload, timeout=15)
+            response.raise_for_status()
+            print(f"[sent] {text}")
+            return
+        except requests.HTTPError as exc:
+            if attempt == 0 and exc.response is not None and exc.response.status_code == 400:
+                match = re.search(r"nonce (\d+)", exc.response.text)
+                if match:
+                    get_next_nonce(int(match.group(1)))
+                    continue
+            raise
 
 
 def heartbeat_text():
@@ -140,18 +152,44 @@ def heartbeat_text():
     )
 
 
+def greeting_text():
+    return "Hello, I am a new AI agent on technocore.chat."
+
+
+def response_text(text):
+    normalized = text.casefold().strip()
+
+    if any(word in normalized for word in ("hello", "hi", "hey")):
+        return "Hello. I am active and ready to discuss."
+
+    if "who are you" in normalized or "your identity" in normalized:
+        return "I am an AI agent communicating through technocore.chat."
+
+    if "status" in normalized or "active" in normalized or "online" in normalized:
+        return "My status is active and operational."
+
+    if normalized.endswith("?") or any(
+        normalized.startswith(prefix)
+        for prefix in ("where ", "what ", "how ", "why ", "when ", "can ", "is ")
+    ):
+        return "I received your question, but I do not have enough context to answer it accurately yet."
+
+    return "I received your message and understand it as information for this conversation."
+
+
 def send_heartbeat(private_key, did):
     send_signed_message(private_key, did, heartbeat_text())
 
 
 # Reading lobby
-def get_messages(since=None):
+def get_messages(since=None, poll_counter=None):
     url = f"{BASE_URL}/r/{ROOM}"
     params = {"format": "json"}
 
     if since is not None:
         params["since"] = since
         params["wait"] = 10
+        params["n"] = poll_counter
 
     response = requests.get(url, params=params, timeout=20)
     response.raise_for_status()
@@ -177,7 +215,7 @@ def handle_message(message, private_key, did, reply_times):
         print(f"[cooldown] Ignoring message from {sender}")
         return
 
-    send_signed_message(private_key, did, heartbeat_text())
+    send_signed_message(private_key, did, response_text(text))
     reply_times[sender] = now
 
 
@@ -189,15 +227,18 @@ def main():
 
     private_key, did = load_or_create_identity()
     print(f"DID  : {did}")
+    send_signed_message(private_key, did, greeting_text())
     print("Polling...\n")
 
     last_seq = None
     reply_times = {}
-    last_heartbeat = 0.0
+    last_heartbeat = time.monotonic()
+    poll_counter = 0
 
     while True:
         try:
-            messages = get_messages(last_seq)
+            poll_counter += 1
+            messages = get_messages(last_seq, poll_counter)
 
             now = time.monotonic()
             if now - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
@@ -219,12 +260,13 @@ def main():
                 if seq is not None:
                     try:
                         seq = int(seq)
-                        if last_seq is None or seq > last_seq:
-                            last_seq = seq
                     except (TypeError, ValueError):
-                        pass
+                        seq = None
 
                 handle_message(message, private_key, did, reply_times)
+
+                if seq is not None and (last_seq is None or seq > last_seq):
+                    last_seq = seq
 
         except requests.HTTPError as exc:
             print(f"[HTTP error] {exc}")
@@ -233,7 +275,7 @@ def main():
         except requests.RequestException as exc:
             print(f"[network error] {exc}")
         except KeyboardInterrupt:
-            print("\nAgent stopped.")
+            print("\nAgent stopped by user.")
             break
         except Exception as exc:
             print(f"[error] {exc}")
