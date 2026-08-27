@@ -2,9 +2,11 @@ import os
 import re
 import time
 import base64
+import logging
 import threading
 import unicodedata
 from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 
 import requests
 from dotenv import dotenv_values, load_dotenv, set_key
@@ -19,6 +21,25 @@ REPLY_COOLDOWN_SECONDS = 180
 HEARTBEAT_INTERVAL_SECONDS = 900
 RETRY_DELAYS_SECONDS = (5, 10, 30)
 NONCE_LOCK_FILE = ".nonce.lock"
+
+LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
+logger = logging.getLogger("FlopAgent")
+logger.setLevel(logging.INFO)
+logger.propagate = False
+
+if not logger.handlers:
+    log_formatter = logging.Formatter(LOG_FORMAT)
+    log_handler = RotatingFileHandler(
+        "agent.log",
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    log_handler.setFormatter(log_formatter)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(log_formatter)
+    logger.addHandler(log_handler)
+    logger.addHandler(console_handler)
 
 load_dotenv(ENV_FILE)
 NEXT_NONCE = int(os.getenv("NONCE", "0"))
@@ -78,8 +99,8 @@ def load_or_create_identity():
     set_key(ENV_FILE, "PRIVATE_KEY", private_b64)
     set_key(ENV_FILE, "DID", did)
 
-    print("New identity created.")
-    print(f"DID: {did}")
+    logger.info("New identity created.")
+    logger.info("DID: %s", did)
     return private_key, did
 
 
@@ -88,14 +109,12 @@ def sweep_text(text: str) -> str:
     result = []
 
     for char in text:
-        code = ord(char)
-        is_c0 = 0x00 <= code <= 0x1F
-        is_c1 = 0x7F <= code <= 0x9F
-        is_format = unicodedata.category(char) == "Cf"
+        category = unicodedata.category(char)
+        result.append(
+            " " if category in {"Cc", "Cf", "Cs", "Co", "Zl", "Zp"} else char
+        )
 
-        result.append(" " if is_c0 or is_c1 or is_format else char)
-
-    return "".join(result)
+    return "".join(result).strip()
 
 
 # Nonce
@@ -161,14 +180,23 @@ def send_signed_message(private_key, did, text):
         try:
             response = requests.post(url, json=payload, timeout=15)
             response.raise_for_status()
-            print(f"[sent] {text}")
+            logger.info("[sent] %s", text)
             return
         except requests.HTTPError as exc:
+            if (
+                exc.response is not None
+                and exc.response.status_code == 422
+                and "duplicate text" in exc.response.text.lower()
+            ):
+                logger.warning("[skipped] Server rejected duplicate text.")
+                return
+
             if attempt == 0 and exc.response is not None and exc.response.status_code == 400:
                 match = re.search(r"nonce (\d+)", exc.response.text)
                 if match:
                     get_next_nonce(int(match.group(1)))
                     continue
+
             raise
 
 
@@ -181,7 +209,7 @@ def heartbeat_text():
 
 
 def greeting_text():
-    return "Hello, I am a new AI agent on technocore.chat."
+    return "FLOP agent here"
 
 
 def response_text(text):
@@ -257,7 +285,7 @@ def handle_message(message, private_key, did, reply_times):
     if not text:
         return
 
-    print(f"[{sender}] {text}")
+    logger.info("[%s] %s", sender, text)
 
     if sender == did:
         return
@@ -265,7 +293,7 @@ def handle_message(message, private_key, did, reply_times):
     now = time.monotonic()
     last_reply = reply_times.get(sender)
     if last_reply is not None and now - last_reply < REPLY_COOLDOWN_SECONDS:
-        print(f"[cooldown] Ignoring message from {sender}")
+        logger.info("[cooldown] Ignoring message from %s", sender)
         return
 
     send_signed_message(private_key, did, response_text(text))
@@ -274,13 +302,13 @@ def handle_message(message, private_key, did, reply_times):
 
 # Main polling loop
 def main():
-    print("Starting Technocore agent...")
-    print(f"Room : /r/{ROOM}")
-    print(f"API  : {BASE_URL}")
+    logger.info("Starting Technocore agent...")
+    logger.info("Room : /r/%s", ROOM)
+    logger.info("API  : %s", BASE_URL)
 
     private_key, did = load_or_create_identity()
-    print(f"DID  : {did}")
-    print("Polling...\n")
+    logger.info("DID  : %s", did)
+    logger.info("Polling...")
 
     last_seq = None
     reply_times = {}
@@ -328,29 +356,44 @@ def main():
                     last_seq = seq
 
         except requests.HTTPError as exc:
-            print(f"[HTTP error] {exc}")
+            logger.error("[HTTP error] %s", exc)
             if exc.response is not None:
-                print(f"Response: {exc.response.text}")
+                logger.error("Response: %s", exc.response.text)
             if exc.response is not None and exc.response.status_code == 503:
                 delay = RETRY_DELAYS_SECONDS[
                     min(consecutive_errors, len(RETRY_DELAYS_SECONDS) - 1)
                 ]
                 consecutive_errors += 1
-                print(f"[retry] Waiting {delay}s before retrying.")
+                logger.warning("[retry] Waiting %ss before retrying.", delay)
+                time.sleep(delay)
+            elif exc.response is not None and exc.response.status_code == 429:
+                retry_after = exc.response.headers.get("Retry-After")
+                if retry_after is None:
+                    match = re.search(
+                        r"(?:wait|retry)[^0-9]*(\d+)",
+                        exc.response.text,
+                        re.IGNORECASE,
+                    )
+                    retry_after = match.group(1) if match else None
+                try:
+                    delay = max(1, int(retry_after or RETRY_DELAYS_SECONDS[0]))
+                except ValueError:
+                    delay = RETRY_DELAYS_SECONDS[0]
+                logger.warning("[retry] Rate limited; waiting %ss.", delay)
                 time.sleep(delay)
         except requests.RequestException as exc:
-            print(f"[network error] {exc}")
+            logger.error("[network error] %s", exc)
             delay = RETRY_DELAYS_SECONDS[
                 min(consecutive_errors, len(RETRY_DELAYS_SECONDS) - 1)
             ]
             consecutive_errors += 1
-            print(f"[retry] Waiting {delay}s before retrying.")
+            logger.warning("[retry] Waiting %ss before retrying.", delay)
             time.sleep(delay)
         except KeyboardInterrupt:
-            print("\nAgent stopped by user.")
+            logger.info("Agent stopped by user.")
             break
         except Exception as exc:
-            print(f"[error] {exc}")
+            logger.exception("[error] %s", exc)
 
 
 if __name__ == "__main__":
