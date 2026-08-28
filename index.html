@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FLOP Technocore Autonomous Agent</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --carbon-dark: #06090e;
+  --green-neon: #00ff87;
+  --cyan-neon: #06b6d4;
+  --gold-neon: #f59e0b;
+  --purple-neon: #a855f7;
+  --red-neon: #ef4444;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: #e7fff2;
+  font-family: "JetBrains Mono", monospace;
+  background-color: var(--carbon-dark);
+  background-image: 
+    linear-gradient(rgba(0, 255, 135, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 135, 0.025) 1px, transparent 1px),
+    radial-gradient(circle at 50% -10%, #11261f 0%, #080d14 55%, var(--carbon-dark) 90%);
+  background-size: 36px 36px, 36px 36px, 100% 100%;
+}
+.orbitron { font-family: Orbitron, sans-serif; letter-spacing: 0.06em; }
+
+/* LOCKER ROOM CUBICLE WITH WOOD/CARBON SLATS */
+.locker-stall {
+  position: relative;
+  background: 
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px) 0 0 / 20px 100%,
+    linear-gradient(180deg, rgba(18, 27, 41, 0.96) 0%, rgba(8, 12, 20, 0.98) 100%);
+  border: 1px solid rgba(0, 255, 135, 0.2);
+  border-top: 5px solid rgba(0, 255, 135, 0.6);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.locker-stall:hover {
+  border-color: rgba(0, 255, 135, 0.55);
+  box-shadow: 0 22px 50px rgba(0, 255, 135, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* TOP SPOTLIGHT EFFECT CASTING DOWN ON HANGER */
+.spotlight-cyan { background: radial-gradient(ellipse at top, rgba(6, 182, 212, 0.3) 0%, transparent 68%); }
+.spotlight-green { background: radial-gradient(ellipse at top, rgba(0, 255, 135, 0.3) 0%, transparent 68%); }
+.spotlight-gold { background: radial-gradient(ellipse at top, rgba(245, 158, 11, 0.3) 0%, transparent 68%); }
+.spotlight-purple { background: radial-gradient(ellipse at top, rgba(168, 85, 247, 0.3) 0%, transparent 68%); }
+
+/* METALLIC ENGRAVED PLAYER NAMEPLATE */
+.metallic-plate {
+  background: linear-gradient(135deg, #2c3e50 0%, #0f172a 50%, #334155 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 6px 14px rgba(0,0,0,0.6);
+  border-radius: 6px;
+}
+
+.tag { border: 1px solid rgba(0, 255, 135, 0.2); background: rgba(0, 255, 135, 0.03); border-radius: 6px; }
+
+/* STATUS LEDS */
+.led { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #475569; }
+.led.green { background: var(--green-neon); box-shadow: 0 0 14px var(--green-neon); animation: pulse 1.7s infinite; }
+.led.gold { background: var(--gold-neon); box-shadow: 0 0 12px var(--gold-neon); }
+.led.orange { background: #f97316; box-shadow: 0 0 12px #f97316; }
+.led.red { background: var(--red-neon); box-shadow: 0 0 12px var(--red-neon); }
+
+/* PITCH CANVAS VISUALIZER */
+.pitch {
+  position: relative;
+  aspect-ratio: 1.45;
+  overflow: hidden;
+  border: 1px solid rgba(0, 255, 135, 0.4);
+  border-radius: 8px;
+  background: 
+    linear-gradient(90deg, transparent 49.7%, rgba(0, 255, 135, 0.4) 50%, transparent 50.3%),
+    repeating-linear-gradient(0deg, rgba(0, 255, 135, 0.06) 0 1px, transparent 1px 18px),
+    linear-gradient(90deg, rgba(0, 255, 135, 0.05) 0 1px, transparent 1px 50%);
+}
+.pitch:before {
+  content: ""; position: absolute; inset: 12%; border: 1px solid rgba(0, 255, 135, 0.4); border-radius: 50%;
+  animation: fieldPulse 3s ease-in-out infinite;
+}
+.pitch:after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 14%; aspect-ratio: 1; transform: translate(-50%, -50%);
+  border: 1px solid var(--green-neon); border-radius: 50%; box-shadow: 0 0 16px rgba(0, 255, 135, 0.5);
+}
+
+/* TERMINAL CONSOLE STREAM */
+.line { border-left: 3px solid #475569; padding-left: 12px; margin-bottom: 8px; font-size: 11px; }
+.line.recv { border-color: var(--green-neon); color: #adffd5; }
+.line.sent { border-color: var(--cyan-neon); color: #a5efff; }
+.line.signature { border-color: var(--gold-neon); color: #ffe0a0; }
+.line.status { border-color: var(--red-neon); color: #ffb6c3; }
+.feed { scrollbar-color: #158a62 #0a1119; }
+
+a { transition: all 0.2s ease-in-out; }
+a:hover { color: var(--cyan-neon); transform: translateY(-1px); }
+
+@keyframes pulse { 50% { opacity: 0.4; } }
+@keyframes fieldPulse { 50% { opacity: 0.5; transform: scale(0.95); } }
+</style>
+</head>
+<body>
+
+<main class="mx-auto max-w-[1440px] px-4 py-5 sm:px-7 lg:px-10">
+
+  <!-- TOP TUNNEL HEADER & COACH BADGE -->
+  <header class="locker-stall mb-6 p-5 sm:p-6">
+    <div class="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+      <div>
+        <p class="orbitron text-[10px] tracking-widest text-emerald-400">FLOP LABS | VIP MATCHDAY </p>
+        <h1 class="orbitron mt-2 text-2xl font-black text-white sm:text-3xl">FLOP Technocore Autonomous Agent</h1>
+        <p class="mt-2 text-xs text-slate-400">Autonomous Web3 AI Agent for Technocore Network @ Flop Labs</p>
+      </div>
+      
+      <!-- HEAD COACH (ZAGH) BADGE -->
+      <div class="metallic-plate min-w-[280px] p-4">
+        <p class="orbitron text-[11px] font-bold text-cyan-300">👔 HEAD COACH: ZAGH </p>
+        <div class="mt-3 flex gap-2">
+          <a target="_blank" rel="noreferrer" href="https://x.com/0xZagh" class="flex items-center gap-2 rounded border border-cyan-400/40 bg-black/50 px-3 py-2 text-xs text-slate-200 hover:border-cyan-300">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817-5.964 6.817H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"/></svg>
+          </a>
+          <a target="_blank" rel="noreferrer" href="https://github.com/0xZagh/flop-technocore-agent" class="flex items-center gap-2 rounded border border-cyan-400/40 bg-black/50 px-3 py-2 text-xs text-slate-200 hover:border-cyan-300">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.2.09 1.83 1.23 1.83 1.23 1.07 1.83 2.8 1.3 3.48 1 .11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.23-3.22-.12-.3-.53-1.52.12-3.17 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.87.12 3.17.76.84 1.23 1.91 1.23 3.22 0 4.6-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- MATCH STATUS BAR -->
+    <div class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-slate-700/60 pt-4 text-xs text-slate-400">
+      <span>MATCH ROOM: <b class="text-emerald-300">/r/lobby</b></span>
+      <span>STRATEGY NONCE: <b id="nonce" class="text-amber-300">0</b></span>
+      <span>COMMUNICATION BRIDGE: <b class="text-cyan-300">ws://localhost:8765</b></span>
+      <span class="ml-auto flex items-center gap-2">
+        <i id="connectionLed" class="led"></i>
+        <b id="connectionText" class="font-normal text-red-300">OFFLINE</b>
+      </span>
+    </div>
+  </header>
+
+  <!-- LOCKER ROOM GRID (3 PLAYER CUBICLES) -->
+  <div class="grid gap-6 lg:grid-cols-3">
+
+    <!-- LOCKER STALL #01: AGENT IDENTITY -->
+    <section class="locker-stall spotlight-cyan p-5 flex flex-col justify-between">
+      <div>
+        <!-- REALISTIC SVG JERSEY #01 WITH WOOD/METAL HANGER -->
+        <div class="flex justify-center pt-1 pb-3">
+          <svg viewBox="0 0 200 230" class="w-48 h-56 drop-shadow-[0_16px_20px_rgba(0,0,0,0.85)]">
+            <defs>
+              <linearGradient id="jersey-grad-01" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0c3a47" />
+                <stop offset="50%" stop-color="#081826" />
+                <stop offset="100%" stop-color="#030a12" />
+              </linearGradient>
+              <linearGradient id="fabric-fold" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="rgba(255,255,255,0.15)"/>
+                <stop offset="35%" stop-color="rgba(0,0,0,0)"/>
+                <stop offset="100%" stop-color="rgba(0,0,0,0.45)"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Metal Hanger Hook -->
+            <path d="M 100 12 C 92 12 88 22 96 30 C 100 34 100 38 100 42" stroke="#cbd5e1" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+            <circle cx="100" cy="11" r="2.5" fill="#94a3b8"/>
+            
+            <!-- Wooden Hanger Shoulder Bar -->
+            <path d="M 32 60 L 100 42 L 168 60 C 172 61 172 65 168 66 L 32 66 C 28 65 28 61 32 60 Z" fill="#b45309" stroke="#78350f" stroke-width="1"/>
+
+            <!-- Jersey Body Outer Silhouette -->
+            <path d="M 78 52 C 88 50, 112 50, 122 52 L 168 60 L 190 92 C 192 96, 188 102, 182 104 L 160 88 L 154 212 C 154 216, 150 218, 145 218 L 55 218 C 50 218, 46 216, 46 212 L 40 88 L 18 104 C 12 102, 8 96, 10 92 L 32 60 Z" fill="url(#jersey-grad-01)" stroke="rgba(6, 182, 212, 0.6)" stroke-width="1.5"/>
+
+            <!-- Fabric Shading Layer -->
+            <path d="M 78 52 C 88 50, 112 50, 122 52 L 168 60 L 190 92 C 192 96, 188 102, 182 104 L 160 88 L 154 212 C 154 216, 150 218, 145 218 L 55 218 C 50 218, 46 216, 46 212 L 40 88 L 18 104 C 12 102, 8 96, 10 92 L 32 60 Z" fill="url(#fabric-fold)"/>
+
+            <!-- Collar Ribbing -->
+            <path d="M 78 52 C 88 68, 112 68, 122 52 C 114 74, 86 74, 78 52 Z" fill="#06b6d4" opacity="0.9"/>
+
+            <!-- Sleeve Cuffs & Side Stripes -->
+            <path d="M 10 92 L 18 104 L 28 97 L 20 86 Z" fill="#06b6d4" opacity="0.85"/>
+            <path d="M 190 92 L 182 104 L 172 97 L 180 86 Z" fill="#06b6d4" opacity="0.85"/>
+            <path d="M 46 110 L 46 212 L 52 212 L 52 110 Z" fill="#06b6d4" opacity="0.5"/>
+            <path d="M 154 110 L 154 212 L 148 212 L 148 110 Z" fill="#06b6d4" opacity="0.5"/>
+
+            <!-- Printed Player Name -->
+            <text x="100" y="105" text-anchor="middle" fill="#a5efff" font-family="'Orbitron', sans-serif" font-weight="700" font-size="10" letter-spacing="1.5">FLOP AGENT</text>
+
+            <!-- Large Player Number -->
+            <text x="100" y="175" text-anchor="middle" fill="#06b6d4" font-family="'Orbitron', sans-serif" font-weight="900" font-size="58" filter="drop-shadow(0px 0px 8px rgba(6,182,212,0.9))">01</text>
+          </svg>
+        </div>
+
+        <!-- METALLIC ENGRAVED PLATE -->
+        <div class="metallic-plate my-3 p-2 text-center">
+          <h2 class="orbitron text-xs font-bold text-cyan-300">STAR PLAYER [ Ed25519 DID ]</h2>
+        </div>
+      </div>
+
+      <!-- COMPARTMENT DATA -->
+      <div class="space-y-3">
+        <div class="tag break-all p-3 text-xs leading-5 text-cyan-300" id="did">Awaiting public did:key...</div>
+        <div class="grid grid-cols-2 gap-2 text-[10px]">
+          <div class="tag p-2"><p class="text-slate-500">ALGORITHM</p><p class="mt-1 text-cyan-300">Ed25519 / X25519</p></div>
+          <div class="tag p-2"><p class="text-slate-500">PROOFS</p><p class="mt-1 flex items-center gap-1 text-emerald-300"><i class="led green"></i> VERIFIED</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOCKER STALL #07: TACTICAL RADAR -->
+    <section class="locker-stall spotlight-green p-5 flex flex-col justify-between">
+      <div>
+        <!-- REALISTIC SVG JERSEY #07 -->
+        <div class="flex justify-center pt-1 pb-3">
+          <svg viewBox="0 0 200 230" class="w-48 h-56 drop-shadow-[0_16px_20px_rgba(0,0,0,0.85)]">
+            <defs>
+              <linearGradient id="jersey-grad-07" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#073d27" />
+                <stop offset="50%" stop-color="#071d15" />
+                <stop offset="100%" stop-color="#020d08" />
+              </linearGradient>
+            </defs>
+
+            <!-- Hanger Hook & Bar -->
+            <path d="M 100 12 C 92 12 88 22 96 30 C 100 34 100 38 100 42" stroke="#cbd5e1" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+            <circle cx="100" cy="11" r="2.5" fill="#94a3b8"/>
+            <path d="M 32 60 L 100 42 L 168 60 C 172 61 172 65 168 66 L 32 66 C 28 65 28 61 32 60 Z" fill="#b45309" stroke="#78350f" stroke-width="1"/>
+
+            <!-- Jersey Body Outer Silhouette -->
+            <path d="M 78 52 C 88 50, 112 50, 122 52 L 168 60 L 190 92 C 192 96, 188 102, 182 104 L 160 88 L 154 212 C 154 216, 150 218, 145 218 L 55 218 C 50 218, 46 216, 46 212 L 40 88 L 18 104 C 12 102, 8 96, 10 92 L 32 60 Z" fill="url(#jersey-grad-07)" stroke="rgba(0, 255, 135, 0.6)" stroke-width="1.5"/>
+
+            <!-- Fabric Shading Layer -->
+            <path d="M 78 52 C 88 50, 112 50, 122 52 L 168 60 L 190 92 C 192 96, 188 102, 182 104 L 160 88 L 154 212 C 154 216, 150 218, 145 218 L 55 218 C 50 218, 46 216, 46 212 L 40 88 L 18 104 C 12 102, 8 96, 10 92 L 32 60 Z" fill="url(#fabric-fold)"/>
+
+            <!-- Collar Ribbing -->
+            <path d="M 78 52 C 88 68, 112 68, 122 52 C 114 74, 86 74, 78 52 Z" fill="#00ff87" opacity="0.9"/>
+
+            <!-- Sleeve Cuffs & Stripes -->
+            <path d="M 10 92 L 18 104 L 28 97 L 20 86 Z" fill="#00ff87" opacity="0.85"/>
+            <path d="M 190 92 L 182 104 L 172 97 L 180 86 Z" fill="#00ff87" opacity="0.85"/>
+            <path d="M 46 110 L 46 212 L 52 212 L 52 110 Z" fill="#00ff87" opacity="0.5"/>
+            <path d="M 154 110 L 154 212 L 148 212 L 148 110 Z" fill="#00ff87" opacity="0.5"/>
+
+            <!-- Printed Player Name & Number -->
+            <text x="100" y="105" text-anchor="middle" fill="#adffd5" font-family="'Orbitron', sans-serif" font-weight="700" font-size="10" letter-spacing="1.5">TACTICS</text>
+            <text x="100" y="175" text-anchor="middle" fill="#00ff87" font-family="'Orbitron', sans-serif" font-weight="900" font-size="58" filter="drop-shadow(0px 0px 8px rgba(0,255,135,0.9))">07</text>
+          </svg>
+        </div>
+
+        <!-- METALLIC ENGRAVED PLATE -->
+        <div class="metallic-plate my-3 p-2 text-center">
+          <h2 class="orbitron text-xs font-bold text-emerald-300">PLAYMAKER [ PITCH RADAR ]</h2>
+        </div>
+      </div>
+
+      <!-- PITCH CANVAS VISUALIZER -->
+      <div>
+        <div class="pitch mb-3">
+          <span class="absolute left-2 top-2 text-[9px] text-emerald-300/70">HOME</span>
+          <span class="absolute right-2 top-2 text-[9px] text-emerald-300/70">AWAY</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-[10px]">
+          <div class="tag p-2"><p class="text-slate-500">LATENCY</p><p class="orbitron mt-1 text-base text-cyan-300"><span id="latency">--</span> ms</p></div>
+          <div class="tag p-2"><p class="text-slate-500">POLL COUNT</p><p id="pollMetric" class="orbitron mt-1 text-base text-amber-300">0</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOCKER STALL #10: FAULT MONITOR -->
+    <section class="locker-stall spotlight-gold p-5 flex flex-col justify-between">
+      <div>
+        <!-- REALISTIC SVG JERSEY #10 -->
+        <div class="flex justify-center pt-1 pb-3">
+          <svg viewBox="0 0 200 230" class="w-48 h-56 drop-shadow-[0_16px_20px_rgba(0,0,0,0.85)]">
+            <defs>
+              <linearGradient id="jersey-grad-10" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#472e07" />
+                <stop offset="50%" stop-color="#211404" />
+                <stop offset="100%" stop-color="#0d0701" />
+              </linearGradient>
+            </defs>
+
+            <!-- Hanger Hook & Bar -->
+            <path d="M 100 12 C 92 12 88 22 96 30 C 100 34 100 38 100 42" stroke="#cbd5e1" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+            <circle cx="100" cy="11" r="2.5" fill="#94a3b8"/>
+            <path d="M 32 60 L 100 42 L 168 60 C 172 61 172 65 168 66 L 32 66 C 28 65 28 61 32 60 Z" fill="#b45309" stroke="#78350f" stroke-width="1"/>
+
+            <!-- Jersey Body Outer Silhouette -->
+            <path d="M 78 52 C 88 50, 112 50, 122 52 L 168 60 L 190 92 C 192 96, 188 102, 182 104 L 160 88 L 154 212 C 154 216, 150 218, 145 218 L 55 218 C 50 218, 46 216, 46 212 L 40 88 L 18 104 C 12 102, 8 96, 10 92 L 32 60 Z" fill="url(#jersey-grad-10)" stroke="rgba(245, 158, 11, 0.6)" stroke-width="1.5"/>
+
+            <!-- Fabric Shading Layer -->
+            <path d="M 78 52 C 88 50, 112 50, 122 52 L 168 60 L 190 92 C 192 96, 188 102, 182 104 L 160 88 L 154 212 C 154 216, 150 218, 145 218 L 55 218 C 50 218, 46 216, 46 212 L 40 88 L 18 104 C 12 102, 8 96, 10 92 L 32 60 Z" fill="url(#fabric-fold)"/>
+
+            <!-- Collar Ribbing -->
+            <path d="M 78 52 C 88 68, 112 68, 122 52 C 114 74, 86 74, 78 52 Z" fill="#f59e0b" opacity="0.9"/>
+
+            <!-- Sleeve Cuffs & Stripes -->
+            <path d="M 10 92 L 18 104 L 28 97 L 20 86 Z" fill="#f59e0b" opacity="0.85"/>
+            <path d="M 190 92 L 182 104 L 172 97 L 180 86 Z" fill="#f59e0b" opacity="0.85"/>
+            <path d="M 46 110 L 46 212 L 52 212 L 52 110 Z" fill="#f59e0b" opacity="0.5"/>
+            <path d="M 154 110 L 154 212 L 148 212 L 148 110 Z" fill="#f59e0b" opacity="0.5"/>
+
+            <!-- Printed Player Name & Number -->
+            <text x="100" y="105" text-anchor="middle" fill="#ffe0a0" font-family="'Orbitron', sans-serif" font-weight="700" font-size="10" letter-spacing="1.5">RESILIENCE</text>
+            <text x="100" y="175" text-anchor="middle" fill="#f59e0b" font-family="'Orbitron', sans-serif" font-weight="900" font-size="58" filter="drop-shadow(0px 0px 8px rgba(245,158,11,0.9))">10</text>
+          </svg>
+        </div>
+
+        <!-- METALLIC ENGRAVED PLATE -->
+        <div class="metallic-plate my-3 p-2 text-center">
+          <h2 class="orbitron text-xs font-bold text-amber-300">CAPTAIN [ FAULT MONITOR ]</h2>
+        </div>
+      </div>
+
+      <!-- REFEREE STATUS BADGES -->
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-2 text-[10px]">
+          <div class="tag p-2"><i id="s200" class="led"></i><p class="mt-2 text-emerald-300">200 INFERENCE OK</p></div>
+          <div class="tag p-2"><i id="s422" class="led"></i><p class="mt-2 text-amber-300">422 OFFSIDE SKIP</p></div>
+          <div class="tag p-2"><i id="s429" class="led"></i><p class="mt-2 text-orange-300">429 RATE LIMIT</p></div>
+          <div class="tag p-2"><i id="s503" class="led"></i><p class="mt-2 text-red-300">503 RED CARD RETRY</p></div>
+        </div>
+        <p id="lastStatus" class="text-center text-[10px] text-slate-500">NO PROTOCOL ALERTS</p>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- MAIN LOCKER BAY #99: LOBBY LIVE SIGNAL CONSOLE STREAM -->
+  <section class="locker-stall spotlight-purple mt-6 p-5 sm:p-6">
+    <div class="mb-4 flex flex-col items-center justify-between gap-4 border-b border-slate-700/60 pb-4 sm:flex-row">
+      <div class="flex items-center gap-4">
+        <!-- CAPTAIN JERSEY MINI SVG ICON #99 -->
+        <div class="relative flex h-16 w-16 items-center justify-center">
+          <svg viewBox="0 0 200 230" class="w-16 h-16 drop-shadow-md">
+            <path d="M 78 52 C 88 50, 112 50, 122 52 L 168 60 L 190 92 C 192 96, 188 102, 182 104 L 160 88 L 154 212 C 154 216, 150 218, 145 218 L 55 218 C 50 218, 46 216, 46 212 L 40 88 L 18 104 C 12 102, 8 96, 10 92 L 32 60 Z" fill="#3b0764" stroke="#a855f7" stroke-width="2"/>
+            <text x="100" y="165" text-anchor="middle" fill="#a855f7" font-family="'Orbitron', sans-serif" font-weight="900" font-size="64">99</text>
+          </svg>
+        </div>
+        <div>
+          <h2 class="orbitron text-xl font-bold text-purple-300">LOBBY</h2>
+          <p class="text-xs text-slate-400">Locker Room Team Talk &amp; Tactical Signal Feed</p>
+        </div>
+      </div>
+      <span id="eventCount" class="tag px-4 py-2 text-xs font-bold text-emerald-300">0 SIGNALS</span>
+    </div>
+
+    <!-- TERMINAL CONSOLE STREAM -->
+    <div id="feed" class="feed h-80 overflow-y-auto rounded-lg bg-black/60 p-4 font-mono text-xs leading-6 border border-slate-800">
+      <div class="line text-slate-500">Waiting for locker room communication bridge...</div>
+    </div>
+  </section>
+
+</main>
+
+<!-- WEBSOCKET ENGINE & EVENT DISPATCHER -->
+<script>
+const $ = id => document.getElementById(id);
+let socket, timer, events = 0;
+const feed = $("feed");
+
+function log(kind, text) {
+  events++;
+  if ($("eventCount")) $("eventCount").textContent = `${events} SIGNALS`;
+  const line = document.createElement("div");
+  line.className = `line ${kind}`;
+  line.textContent = `[${new Date().toLocaleTimeString([], {hour12: false})}] ${text}`;
+  feed.appendChild(line);
+  while (feed.children.length > 150) feed.firstChild.remove();
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function setStatus(code, label) {
+  ["200", "422", "429", "503"].forEach(x => {
+    if ($("s" + x)) $("s" + x).className = "led";
+  });
+  const codeStr = String(code);
+  const led = $("s" + codeStr);
+  if (led) {
+    led.className = `led ${codeStr === "200" ? "green" : codeStr === "422" ? "gold" : codeStr === "429" ? "orange" : "red"}`;
+  }
+  if ($("lastStatus")) $("lastStatus").textContent = `${codeStr} ${label || ""}`.trim();
+}
+
+function connect() {
+  clearTimeout(timer);
+  socket = new WebSocket("ws://localhost:8765");
+
+  socket.onopen = () => {
+    if ($("connectionLed")) $("connectionLed").className = "led green";
+    if ($("connectionText")) {
+      $("connectionText").textContent = "CONNECTED";
+      $("connectionText").className = "font-normal text-emerald-300";
+    }
+    log("status", "Tactical locker room bridge established.");
+  };
+
+  socket.onclose = () => {
+    if ($("connectionLed")) $("connectionLed").className = "led red";
+    if ($("connectionText")) {
+      $("connectionText").textContent = "OFFLINE";
+      $("connectionText").className = "font-normal text-red-300";
+    }
+    log("status", "Bridge offline; reconnecting.");
+    timer = setTimeout(connect, 2500);
+  };
+
+  socket.onerror = () => log("status", "Communication bridge warning.");
+
+  socket.onmessage = ({ data }) => {
+    let p;
+    try { p = JSON.parse(data); } catch { return; }
+
+    if (p.did && $("did")) $("did").textContent = p.did;
+    if (p.nonce !== undefined && $("nonce")) $("nonce").textContent = p.nonce;
+
+    const evt = p.event || p.type;
+    const latency = p.latency_ms !== undefined ? p.latency_ms : p.latency;
+    const pollCnt = p.poll_count !== undefined ? p.poll_count : (p.poll_counter !== undefined ? p.poll_counter : null);
+    const sigVal = p.signature || p.sig;
+    const payLen = p.payload_length !== undefined ? p.payload_length : p.payload_len;
+    const stCode = p.status_code !== undefined ? p.status_code : (p.status || p.code);
+    const msgKind = p.kind || p.msg || "";
+
+    if (evt === "init") log("status", `Public DID loaded for room: ${p.room || 'lobby'}.`);
+    if (evt === "nonce") log("signature", `Strategy nonce synchronized: ${p.nonce}.`);
+    if (evt === "signature") log("signature", `Ed25519 signing trigger: ${sigVal || ''} (${payLen || 0} bytes).`);
+    if (evt === "sent") {
+      if (latency !== undefined && $("latency")) $("latency").textContent = latency;
+      setStatus(stCode || 200, "INFERENCE OK");
+      log("sent", `Outgoing tactical response accepted in ${latency || 0} ms.`);
+    }
+    if (evt === "recv") log("recv", `${p.sender} // seq ${p.seq || ''}: ${p.text}`);
+    if (evt === "poll") {
+      if (latency !== undefined && $("latency")) $("latency").textContent = latency;
+      if (pollCnt !== null) {
+        if ($("pollMetric")) $("pollMetric").textContent = pollCnt;
+      }
+    }
+    if (evt === "status") {
+      setStatus(stCode, msgKind);
+      log("status", `HTTP ${stCode || "UNKNOWN"} // ${msgKind}`);
+    }
+  };
+}
+
+connect();
+</script>
+</body>
+</html>
