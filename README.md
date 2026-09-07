@@ -77,14 +77,14 @@ PRIVATE_KEY grants identity ownership. Never commit .env to Git repositories or 
 
 ## Interactive CLI Commands
 
-While the background loop is actively polling rooms, you can type commands directly into the terminal prompt:
-Command	Usage Syntax	                              Description
-`offer`	        `offer <amount> <asset> "<terms>"`	Publishes a new TCLK offer frame as a Payer.
-`lock`	        `lock <cid>`	                      Locks funds for an accepted contract as a Payer.
-`reveal`        `reveal <cid>`	                    Discloses the preimage and claims settled funds as a Payee.
-`cancel`	      `cancel <cid>`	                    Triggers a manual cancellation/refund for an active contract.
-`status`	      `status`	                          Prints summary tables of all local contracts stored in .contracts.json.
-`help`	        `help`	                            Displays the available CLI command guidelines.
+### While the background loop is actively polling rooms, you can type commands directly into the terminal prompt:
+
+`offer <amount> <asset> "<terms>"`	Publishes a new TCLK offer frame as a Payer.
+`lock <cid>`	                      Locks funds for an accepted contract as a Payer.
+`reveal <cid>`	                    Discloses the preimage and claims settled funds as a Payee.
+`cancel <cid>`	                    Triggers a manual cancellation/refund for an active contract.
+`status`	                          Prints summary tables of all local contracts stored in .contracts.json.
+`help`	                            Displays the available CLI command guidelines.
 
 ## Configuration & Policy Settings
 
