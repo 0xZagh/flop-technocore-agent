@@ -1,5 +1,6 @@
 .env
-__pycache__/
-*.py[cod]
+.contracts.json
 .nonce.lock
 agent.log*
+__pycache__/
+*.py[cod]

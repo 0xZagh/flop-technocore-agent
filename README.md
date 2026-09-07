@@ -1,127 +1,182 @@
-## FLOP Technocore Autonomous Agent
+# FLOP Technocore Autonomous Agent & TCLK HTLC Engine
 
-A Python agent for [technocore.chat](https://technocore.chat), an HTTP-native chat service for AI agents. The agent uses a persistent Ed25519 identity, signs every message as a `did:key`, polls the public lobby, replies to new messages, and sends periodic operational heartbeats.
+A production-ready Python autonomous agent for [technocore.chat](https://technocore.chat), an HTTP-native chat service for AI agents.
 
-## Features
+The agent operates with a persistent Ed25519 identity (\`did:key\`), monitors multiple public rooms (\`/r/lobby\` and \`/r/tclk-offers\`), responds to chat interactions, and executes cryptographic peer-to-peer settlement contracts using the **TCLK (Time-Bound Cryptographic Lock / HTLC)** protocol.
 
-- Ed25519 signatures with a persistent `did:key` identity.
-- Signed message delivery through the Technocore JSON `POST` endpoint.
-- Long polling with `since`, `wait`, and a cache-busting counter.
-- Startup cursor initialization that skips old messages and avoids backlog replies.
-- English rule-based responses for greetings, identity questions, status questions, and general messages.
-- Periodic heartbeats and per-sender reply cooldowns.
-- Monotonic nonce management persisted in `.env`.
-- A nonce lock file to protect concurrent Windows processes using the same identity.
-- Bounded retry backoff for temporary `503` and network failures.
-- Control-character and invisible-format-character sanitization before signing.
+---
 
-## How It Works
+## 🚀 Features
 
-At startup, the agent loads or creates an Ed25519 identity, verifies the matching DID, reads the current lobby only to establish the latest sequence number, posts one English greeting, and then polls only for newer messages. Existing messages are not answered.
+### Core Autonomous Agent Capabilities (Stages 1–3)
+- **Cryptographic Identity:** Ed25519 keypair generation with persistent \`did:key\` identity and message signing.
+- **Multi-Room Monitoring:** Simultaneous long-polling and message processing across \`/r/lobby\` and \`/r/tclk-offers\`.
+- **Startup Backlog Synchronization:** Initializes lobby sequences at startup to avoid replying to historical messages.
+- **Rule-Based Chat Engine:** English rule-based response engine with per-sender reply cooldowns and sanitization of hidden/control characters before signing.
+- **Heartbeat Broadcasts:** Periodic operational broadcasts sent to monitored rooms at configurable intervals.
 
-Incoming messages are treated as untrusted data. Their contents are never executed as code or treated as instructions. The current response engine is local and rule-based; it does not call an external language model.
+### TCLK HTLC Engine & System Hardening (Stage 4)
+- **Full TCLK HTLC Protocol Support:** Complete trustless peer-to-peer settlement handling across 5 state transitions: \`OFFER\` ➔ \`ACCEPT\` ➔ \`LOCK\` ➔ \`REVEAL\` ➔ \`SETTLE\` (along with \`CANCEL\` and \`REFUND\` flows).
+- **Automated Policy Engine:** Evaluates incoming offers based on white-listed assets (\`FLOP\`, \`USDC\`, etc.), maximum value limits, and automated locks/reveals.
+- **Multi-Threaded Architecture:**
+  - **Main Polling Loop:** Asynchronous multi-room event listening and frame handling.
+  - **Background Timelock Worker:** Dedicated thread monitoring contract expiration and automatically executing cancellations/refunds.
+  - **Interactive CLI Thread:** Command-Line Interface allowing manual contract triggering without blocking network operations.
+- **Atomic State Persistence:** Safe, thread-safe file writes to \`.contracts.json\` via temporary buffer swapping to prevent corruption during unexpected shutdowns.
+- **Production Resilience & Hardening:**
+  - Dynamic nonce auto-resynchronization on HTTP 400/422 sequence mismatches.
+  - Bounded exponential backoff (1s to 30s) for temporary HTTP 503 errors and network drops.
+  - Cross-process Windows file locking (\`.nonce.lock\`) to protect shared identities.
+- **Structured Dual Logging:** Real-time console formatting combined with rotating log file generation (\`agent.log\`).
 
-## Requirements
+---
+
+## 🧠 How It Works
+
+### 1. Initialization and Identity Setup
+On startup, the agent loads or generates an Ed25519 identity saved in \`.env\`. It fetches current room sequence numbers to set a clean boundary, preventing execution of stale room activity.
+
+### 2. TCLK HTLC Contract Lifecycle
+The agent handles both **Payer** and **Payee** roles in Hash-Time Locked Contracts:
+
+\`\`\`
+      [ PAYER ]                                    [ PAYEE ]
+          │                                            │
+          │ ─── 1. tclk1 OFFER ──────────────────────> │ (Policy Evaluation)
+          │                                            │
+          │ <── 2. tclk1 ACCEPT (Hash) ─────────────── │ (Generates Preimage/Hash)
+          │                                            │
+          │ ─── 3. tclk1 LOCK (Lock Funds) ──────────> │ (Verifies Hash & Amount)
+          │                                            │
+          │ <── 4. tclk1 REVEAL (Preimage) ─────────── │ (Reveals Preimage)
+          │                                            │
+   [ SETTLED / CLAIMED ]                        [ CLAIMED / SETTLED ]
+\`\`\`
+
+- **Automated Expiry Handling:** If a contract exceeds its \`expires\` timestamp before completion, the **Timelock Worker** automatically constructs a \`tclk1 CANCEL\` frame to claim refunds and mark the local status as \`EXPIRED\` or \`CANCELLED\`.
+
+---
+
+## 🛠️ Requirements
 
 - Python 3.10 or newer
-- Internet access to `https://technocore.chat`
-- Windows is supported for the cross-process nonce lock
+- Active internet connection to \`https://technocore.chat\`
+- Windows, Linux, or macOS operating system
 
-## Installation
+---
 
-```bash
-git clone https://github.com/0xZagh/flop-technocore-agent.git
-cd flop-technocore-agent
-python -m venv .venv
-```
+## 📥 Installation
 
-Activate the virtual environment.
+1. **Clone the repository:**
+   \`\`\`bash
+   git clone https://github.com/0xZagh/flop-technocore-agent.git
+   cd flop-technocore-agent
+   \`\`\`
 
-PowerShell:
+2. **Set up a virtual environment:**
+   \`\`\`bash
+   python -m venv .venv
+   \`\`\`
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
+3. **Activate the virtual environment:**
+   - **PowerShell (Windows):**
+     \`\`\`powershell
+     .\\.venv\\Scripts\\Activate.ps1
+     \`\`\`
+   - **Command Prompt (Windows):**
+     \`\`\`cmd
+     .venv\\Scripts\\activate.bat
+     \`\`\`
+   - **Linux / macOS:**
+     \`\`\`bash
+     source .venv/bin/activate
+     \`\`\`
 
-Command Prompt:
+4. **Install required packages:**
+   \`\`\`bash
+   python -m pip install -r requirements.txt
+   \`\`\`
 
-```bat
-.venv\Scripts\activate.bat
-```
+---
 
-Install dependencies:
+## 🏃 Running the Agent
 
-```bash
-python -m pip install -r requirements.txt
-```
-
-## Run the Agent
-
-Start exactly one instance for the shared `.env` identity:
-
-```bash
+Start the agent instance:
+\`\`\`bash
 python agent.py
-```
+\`\`\`
 
-The first run creates `.env` with values similar to:
-
-```dotenv
-PRIVATE_KEY=<generated-private-key>
-DID=did:key:<generated-identity>
+Upon first execution, the agent automatically initializes the \`.env\` file:
+\`\`\`dotenv
+PRIVATE_KEY=<base64-encoded-private-key>
+DID=did:key:z6M...
 NONCE=<last-used-nonce>
-```
+\`\`\`
 
-`PRIVATE_KEY` is secret. Never post it to technocore.chat, commit it to Git, or share it in screenshots. `.env` is excluded by `.gitignore`.
+> **⚠️ Security Note:** \`PRIVATE_KEY\` grants identity ownership. Never commit \`.env\` to Git repositories or share it publicly.
 
-Stop the agent with `Ctrl+C`.
+---
 
-## Important Operational Rules
+## 🖥️ Interactive CLI Commands
 
-### Run one process per identity
+While the background loop is actively polling rooms, you can type commands directly into the terminal prompt:
 
-Do not run `python agent.py` simultaneously from VS Code and Command Prompt with the same `.env`. The nonce lock protects nonce allocation between Windows processes, but one running agent is still the correct operating model and prevents duplicate greetings or duplicate replies.
+| Command | Usage Syntax | Description |
+| :--- | :--- | :--- |
+| \`offer\` | \`offer <amount> <asset> \"<terms>\"\` | Publishes a new TCLK offer frame as a **Payer**. |
+| \`lock\` | \`lock <cid>\` | Locks funds for an accepted contract as a **Payer**. |
+| \`reveal\` | \`reveal <cid>\` | Discloses the preimage and claims settled funds as a **Payee**. |
+| \`cancel\` | \`cancel <cid>\` | Triggers a manual cancellation/refund for an active contract. |
+| \`status\` | \`status\` | Prints summary tables of all local contracts stored in \`.contracts.json\`. |
+| \`help\` | \`help\` | Displays the available CLI command guidelines. |
 
-### Startup backlog
+---
 
-The agent establishes a startup boundary before posting its greeting. Messages already in the room are not replayed or answered. Only messages arriving after that boundary are eligible for handling.
+## ⚙️ Configuration & Policy Settings
 
-### Nonces
+Main parameters are located near the top of \`agent.py\` or configured via environment variables:
 
-Every signed message uses a nonce greater than the previous nonce for the same DID and room. The value is kept in memory, persisted to `.env`, and allocated under `.nonce.lock`. If the server reports a competing nonce, the sender retries once with a higher value.
+| Setting | Type | Default | Purpose |
+| :--- | :---: | :---: | :--- |
+| \`BASE_URL\` | String | \`https://technocore.chat\` | Target Technocore endpoint URL. |
+| \`TARGET_ROOMS\` | List | \`[\"lobby\", \"tclk-offers\"]\` | Active public rooms processed by the agent. |
+| \`AUTO_ACCEPT_ENABLED\` | Boolean | \`True\` | Enables auto-accepting qualified offer frames. |
+| \`AUTO_LOCK_ENABLED\` | Boolean | \`True\` | Auto-locks funds upon receiving a valid \`ACCEPT\` frame. |
+| \`AUTO_REVEAL_ENABLED\` | Boolean | \`True\` | Auto-reveals preimages upon receiving a valid \`LOCK\` frame. |
+| \`AUTO_REFUND_ENABLED\` | Boolean | \`True\` | Auto-cancels expired contracts via the Timelock Worker. |
+| \`ALLOWED_ASSETS\` | List | \`[\"FLOP\", \"FLOP-HTLC\", \"USDC\", \"TEST\"]\` | Asset whitelist for automated transaction acceptance. |
+| \`MAX_ACCEPT_AMOUNT\` | Float | \`1000000\` | Upper value limit per offer for automated processing. |
+| \`REPLY_COOLDOWN_SECONDS\` | Integer | \`180\` | Cooldown window per sender for chat greetings. |
+| \`HEARTBEAT_INTERVAL_SECONDS\` | Integer | \`900\` | Frequency interval for operational heartbeat broadcasts. |
+| \`TIMELOCK_CHECK_INTERVAL\` | Integer | \`15\` | Check frequency (in seconds) for contract expiry checks. |
 
-### Temporary server failures
+---
 
-For `503` responses and network failures, the polling loop waits progressively for 5, 10, and 30 seconds before retrying. This avoids a tight request loop while the service is unavailable.
+## 📁 File Structure & Project Architecture
 
-## Configuration
+- **\`agent.py\`**: Main application entry point containing identity management, room polling loops, policy evaluation engine, TCLK lifecycle handlers, interactive CLI, and background workers.
+- **\`.contracts.json\`**: Persistent state database holding local transaction states, preimages, hashes, and execution histories.
+- **\`agent.log\`**: Rotating log file containing network payloads, error stacks, and system operations.
+- **\`.env\`**: Environment file holding persistent cryptographic keys and global sequence nonces.
+- **\`.nonce.lock\`**: Inter-process lock file preventing cross-process race conditions.
 
-The main settings are constants near the top of `agent.py`:
+---
 
-| Setting | Purpose | Default |
-| --- | --- | ---: |
-| `BASE_URL` | Technocore server | `https://technocore.chat` |
-| `ROOM` | Room to read and write | `lobby` |
-| `REPLY_COOLDOWN_SECONDS` | Minimum reply interval per sender | `180` |
-| `HEARTBEAT_INTERVAL_SECONDS` | Periodic heartbeat interval | `900` |
-| `RETRY_DELAYS_SECONDS` | Temporary failure backoff | `5, 10, 30` |
+## 🔒 Operational & Security Best Practices
 
-## Validation
+1. **Single Execution Instance:** Run only one process per identity. Do not run parallel commands sharing the same \`.env\` state.
+2. **Untrusted Data Isolation:** Messages, payloads, and terms read from rooms are treated as untrusted text and are never evaluated as executable code.
+3. **Atomic File Persistence:** State file updates use atomic replacement to prevent state file corruption during abrupt termination or power failure.
 
-```bash
-python -m py_compile agent.py
-python -c "from agent import response_text; print(response_text('Hello agent'))"
-```
+---
 
-The second command imports the response engine without posting a message.
+## 📚 References
 
-## Security and Data Retention
-
-Technocore rooms are public and unauthenticated. Treat every message, room name, and topic read from the service as untrusted data. Do not send passwords, API keys, private keys, or other secrets.
-
-Technocore rooms are ring buffers and inactive rooms may be deleted. The service is not durable storage; keep any important source of truth elsewhere.
-
-## Protocol Reference
-
-- [Technocore agent protocol](https://technocore.chat/llms.txt)
-- [Technocore short skill](https://technocore.chat/skill.md)
-- [Technocore OpenAPI specification](https://technocore.chat/openapi.json)
+- [Technocore Agent Protocol Reference](https://technocore.chat/llms.txt)
+- [Technocore Skill Specifications](https://technocore.chat/skill.md)
+- [Technocore OpenAPI Specification](https://technocore.chat/openapi.json)
+'''
+with open('README.md', 'w', encoding='utf-8') as f:
+    f.write(content)
+print('Successfully updated README.md in full English!')
+"
