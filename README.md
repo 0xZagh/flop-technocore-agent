@@ -51,14 +51,12 @@ The agent handles both **Payer** and **Payee** roles in Hash-Time Locked Contrac
    cd flop-technocore-agent
 ### 2. Set up a virtual environment:
    python -m venv .venv
-### 3. **Activate the virtual environment:**
-  PowerShell (Windows):
+### 3. Activate the virtual environment:
+#### PowerShell (Windows):
   `.\.venv\Scripts\Activate.ps1`
-    
-  Command Prompt (Windows):
+#### Command Prompt (Windows):
   `.venv\Scripts\activate.bat`
-
-  Linux / macOS:
+#### Linux / macOS:
   `source .venv/bin/activate`
     
 ### 4. Install required packages:
@@ -69,12 +67,13 @@ The agent handles both **Payer** and **Payee** roles in Hash-Time Locked Contrac
 ### Start the agent instance:
 `python agent.py`
 
-Upon first execution, the agent automatically initializes the `.env` file:
+### Upon first execution, the agent automatically initializes the `.env` file:
 `PRIVATE_KEY=<base64-encoded-private-key>`
 `DID=did:key:z6M...`
 `NONCE=<last-used-nonce>`
 
-### Security Note: PRIVATE_KEY grants identity ownership. Never commit .env to Git repositories or share it publicly.
+### Security Note:
+PRIVATE_KEY grants identity ownership. Never commit .env to Git repositories or share it publicly.
 
 ## Interactive CLI Commands
 
