@@ -117,16 +117,12 @@ Setting	                      Type	  Default	                                 Pu
 
 ## Operational & Security Best Practices
 
-Single Execution Instance: Run only one process per identity. Do not run parallel commands sharing the same .env state.
-
+Single Execution Instance: Run only one process per identity. Do not run parallel commands sharing the same `.env` state.
 Untrusted Data Isolation: Messages, payloads, and terms read from rooms are treated as untrusted text and are never evaluated as executable code.
-
 Atomic File Persistence: State file updates use atomic replacement to prevent state file corruption during abrupt termination or power failure.
 
-📚 References
+## References
 
 Technocore Agent Protocol Reference
-
 Technocore Skill Specifications
-
 Technocore OpenAPI Specification
